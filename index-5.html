@@ -1,0 +1,1786 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<script>
+  // Set the seasonal palette before any CSS paints, to avoid a flash of the wrong theme.
+  // Meteorological calendar (not astronomical): Winter Dec–Feb, Spring Mar–May, Summer Jun–Aug, Autumn Sep–Nov.
+  (function(){
+    var m = new Date().getMonth(); // 0 = Jan
+    var season = (m===11||m===0||m===1) ? 'winter' : (m>=2&&m<=4) ? 'spring' : (m>=5&&m<=7) ? 'summer' : 'autumn';
+    document.documentElement.setAttribute('data-season', season);
+  })();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Room Ops — Cleaning Run</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Mulish:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    /* Fallback palette (used until JS sets the season) — warm, cottagey neutrals */
+    --bg:#F8F2E7;
+    --bg-elevated:#EFE4CE;
+    --bg-card:#FFFCF5;
+    --line:#E1D2AF;
+    --text:#3A3020;
+    --text-dim:#8C7C60;
+    --amber:#D99A45;
+    --amber-rgb:217,154,69;
+    --teal:#6E8F63;
+    --teal-rgb:110,143,99;
+    --red:#C2573F;
+    --ink:#2B1D0F;
+    --radius:16px;
+  }
+  /* ---- Seasonal palettes, set via [data-season] on <html> — meteorological calendar ---- */
+  [data-season="spring"]{
+    /* Pastel baby blue & blossom pink */
+    --bg:#F9F6F8; --bg-elevated:#E7EEF6; --bg-card:#FFFFFF; --line:#DBDDE9;
+    --text:#3B3745; --text-dim:#8B8696;
+    --amber:#7FB0DC; --amber-rgb:127,176,220;
+    --teal:#E39CB7; --teal-rgb:227,156,183;
+    --red:#D98080; --ink:#2E2540;
+  }
+  [data-season="summer"]{
+    /* Soft citrus: lemon, orange, lime, with a dash of tropical pink */
+    --bg:#FCF8E6; --bg-elevated:#F5EEB8; --bg-card:#FFFEF2; --line:#E9E2A0;
+    --text:#3A3A18; --text-dim:#8D8850;
+    --amber:#EDA23F; --amber-rgb:237,162,63;
+    --teal:#AECB4E; --teal-rgb:174,203,78;
+    --red:#E8688E; --ink:#332E08;
+  }
+  [data-season="autumn"]{
+    /* Browns, orange, gold, a touch of green */
+    --bg:#F7ECDC; --bg-elevated:#EEDBB0; --bg-card:#FFF8EE; --line:#DDC48F;
+    --text:#3B2A1D; --text-dim:#8A7358;
+    --amber:#CD8A35; --amber-rgb:205,138,53;
+    --teal:#7C8C4E; --teal-rgb:124,140,78;
+    --red:#A2452C; --ink:#2A1B0C;
+  }
+  [data-season="winter"]{
+    /* Dark and muted: sage green, whites, greys */
+    --bg:#24282A; --bg-elevated:#2D3234; --bg-card:#333837; --line:#4A514E;
+    --text:#EDEFEC; --text-dim:#9BA39D;
+    --amber:#8FA88F; --amber-rgb:143,168,143;
+    --teal:#C7CDC7; --teal-rgb:199,205,199;
+    --red:#B97066; --ink:#1E2220;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color: transparent;}
+  html,body{height:100%;}
+  body{
+    margin:0;
+    background:var(--bg);
+    background-image:
+      radial-gradient(ellipse 900px 500px at 15% -8%, rgba(var(--amber-rgb),.10), transparent 60%),
+      radial-gradient(ellipse 700px 500px at 100% 0%, rgba(var(--teal-rgb),.08), transparent 55%);
+    background-attachment:fixed;
+    color:var(--text);
+    font-family:"Mulish", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+    overscroll-behavior:none;
+  }
+  .app{
+    max-width:520px;
+    margin:0 auto;
+    width:100%;
+    flex:1;
+    display:flex;
+    flex-direction:column;
+    padding: env(safe-area-inset-top,0) 18px env(safe-area-inset-bottom,0);
+  }
+  header.topbar{
+    padding:22px 0 10px;
+  }
+  .eyebrow{
+    text-transform:uppercase;
+    letter-spacing:.16em;
+    font-size:11px;
+    color:var(--amber);
+    font-weight:800;
+  }
+  h1.title{
+    font-family:"Fraunces", Georgia, serif;
+    font-size:29px;
+    font-weight:600;
+    letter-spacing:-.01em;
+    margin:5px 0 3px;
+  }
+  .sub{
+    color:var(--text-dim);
+    font-size:14px;
+    line-height:1.5;
+    margin:0 0 18px;
+  }
+  /* ---- Screens ---- */
+  .screen{ display:none; flex-direction:column; flex:1; padding-bottom:24px;}
+  .screen.active{ display:flex; }
+
+  /* ---- Room ticket cards ---- */
+  .room-list{ display:flex; flex-direction:column; gap:10px; margin-bottom:8px; position:relative;}
+  .room-card{
+    position:relative;
+    background:var(--bg-card);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    padding:14px 16px;
+    display:flex;
+    align-items:center;
+    gap:12px;
+    cursor:pointer;
+    user-select:none;
+    transition:border-color .15s, background .15s;
+  }
+  .room-card.selected{
+    border-color:var(--teal);
+    background:linear-gradient(180deg, rgba(var(--teal-rgb),.16), rgba(var(--teal-rgb),.05));
+  }
+  .room-card::after{
+    content:"";
+    position:absolute;
+    right:-1px; top:8px; bottom:8px;
+    width:0;
+    border-right:2px dashed var(--line);
+  }
+  .room-check{
+    width:26px; height:26px; min-width:26px;
+    border-radius:50%;
+    border:2px solid var(--line);
+    display:flex; align-items:center; justify-content:center;
+    font-size:14px; font-weight:900;
+    color:transparent;
+  }
+  .room-card.selected .room-check{
+    border-color:var(--teal);
+    background:var(--teal);
+    color:var(--ink);
+  }
+  .room-icon{ font-size:22px; width:28px; text-align:center;}
+  .room-meta{ flex:1; min-width:0; }
+  .room-name{ font-weight:700; font-size:16px; }
+  .room-count{ color:var(--text-dim); font-size:12.5px; margin-top:1px;}
+  .room-time{ font-variant-numeric: tabular-nums; color:var(--amber); font-weight:700; font-size:13px; white-space:nowrap;}
+
+  .drag-handle{
+    width:34px; min-width:34px; height:40px;
+    display:flex; align-items:center; justify-content:center;
+    color:var(--text-dim); font-size:18px; line-height:1;
+    cursor:grab; touch-action:none; border-radius:8px; letter-spacing:2px;
+    margin-right:-4px;
+  }
+  .drag-handle:active{ cursor:grabbing; }
+  .drag-handle:hover{ color:var(--text); background:rgba(58,48,32,.06); }
+
+  .room-card-placeholder{
+    border:2px dashed var(--teal);
+    border-radius:var(--radius);
+    background:rgba(var(--teal-rgb),.10);
+  }
+  .dragging-ghost{
+    box-shadow:0 14px 30px rgba(58,48,32,.22);
+    opacity:.97;
+    transform:scale(1.015);
+    pointer-events:none;
+    will-change: top;
+  }
+
+  .row-actions{ display:flex; gap:10px; margin:6px 0 20px; }
+  .link-btn{
+    background:none; border:none; color:var(--teal); font-weight:700;
+    font-size:13px; padding:6px 0; cursor:pointer;
+  }
+
+  /* ---- Settings ---- */
+  .settings-block{ margin-bottom:22px; }
+  .settings-label{
+    font-size:11px; text-transform:uppercase; letter-spacing:.14em;
+    color:var(--text-dim); font-weight:700; margin-bottom:10px;
+  }
+  .toggle-row{
+    display:flex; align-items:center; justify-content:space-between;
+    background:var(--bg-card); border:1px solid var(--line);
+    border-radius:12px; padding:13px 14px; margin-bottom:8px;
+  }
+  .toggle-row .t-label{ font-size:14.5px; font-weight:600; }
+  .toggle-row .t-sub{ font-size:12px; color:var(--text-dim); margin-top:2px;}
+  .switch{
+    width:46px; height:27px; border-radius:99px; background:var(--line);
+    position:relative; flex:none; cursor:pointer; transition:background .15s;
+  }
+  .switch.on{ background:var(--teal); }
+  .switch .knob{
+    position:absolute; top:3px; left:3px; width:21px; height:21px; border-radius:50%;
+    background:var(--text); transition:transform .15s, background .15s;
+  }
+  .switch.on .knob{ background:var(--ink); }
+  .switch.on .knob{ transform:translateX(19px); }
+
+  .seg{
+    display:flex; background:var(--bg-card); border:1px solid var(--line);
+    border-radius:12px; padding:4px; gap:4px;
+  }
+  .seg button{
+    flex:1; border:none; background:transparent; color:var(--text-dim);
+    font-weight:700; font-size:13.5px; padding:10px 8px; border-radius:9px; cursor:pointer;
+  }
+  .seg button.active{ background:var(--amber); color:var(--ink); }
+  .seg-3 button{ font-size:12px; padding:10px 4px; letter-spacing:-.01em; }
+  .seg-desc{ font-size:12px; color:var(--text-dim); margin-top:8px; line-height:1.5;}
+
+  .estimate-bar{
+    display:flex; align-items:baseline; justify-content:space-between;
+    background:var(--bg-elevated); border:1px solid var(--line);
+    border-radius:12px; padding:14px 16px; margin:4px 0 18px;
+  }
+  .estimate-bar .num{ font-size:26px; font-weight:800; font-variant-numeric: tabular-nums; color:var(--amber);}
+  .estimate-bar .lbl{ font-size:12px; color:var(--text-dim);}
+
+  .primary-btn{
+    background:var(--amber); color:var(--ink); border:none; border-radius:14px;
+    padding:16px; font-size:16px; font-weight:800; cursor:pointer;
+    width:100%; letter-spacing:.01em;
+  }
+  .primary-btn:disabled{ opacity:.4; }
+  .ghost-btn{
+    background:transparent; color:var(--text); border:1px solid var(--line);
+    border-radius:14px; padding:14px; font-size:14.5px; font-weight:700; cursor:pointer; width:100%;
+  }
+  .text-input{
+    width:100%; background:var(--bg-card); border:1px solid var(--line); color:var(--text);
+    border-radius:10px; padding:12px 14px; font-size:14px; margin-top:6px;
+  }
+  .text-input::placeholder{ color:var(--text-dim); }
+  .redirect-row{
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    background:var(--bg-card); border:1px solid var(--line); border-radius:10px;
+    padding:11px 12px; margin-top:6px;
+  }
+  .redirect-row span{ font-size:12px; color:var(--text-dim); word-break:break-all; }
+  .status-note{
+    font-size:12.5px; color:var(--text-dim); background:var(--bg-elevated);
+    border:1px solid var(--line); border-radius:10px; padding:10px 12px; margin-top:10px; line-height:1.5;
+  }
+  .footer-actions{ margin-top:auto; padding-top:16px; display:flex; flex-direction:column; gap:10px;}
+
+  /* ---- Run screen ---- */
+  .run-top{
+    display:flex; align-items:center; justify-content:space-between; padding:18px 0 6px;
+  }
+  .room-chip{
+    display:flex; align-items:center; gap:8px;
+    background:var(--bg-card); border:1px solid var(--line);
+    padding:7px 12px 7px 8px; border-radius:99px; font-size:13px; font-weight:700;
+  }
+  .end-btn{ color:var(--text-dim); background:none; border:none; font-size:13px; font-weight:700; cursor:pointer;}
+
+  .dial-wrap{ display:flex; justify-content:center; margin:18px 0 6px; position:relative;}
+  .dial-track{ stroke:var(--line); }
+  .dial-progress{ stroke:var(--amber); }
+  .dial-time{
+    position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+    text-align:center;
+  }
+  .dial-time .num{
+    font-size:44px; font-weight:800; font-variant-numeric: tabular-nums;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  .dial-time .of{ font-size:11px; color:var(--text-dim); letter-spacing:.1em; text-transform:uppercase; margin-top:2px;}
+
+  .task-card{
+    background:var(--bg-card); border:1px solid var(--line); border-radius:18px;
+    padding:22px 20px; text-align:center; margin:14px 0 10px;
+  }
+  .task-index{ color:var(--amber); font-size:12px; font-weight:800; letter-spacing:.12em; text-transform:uppercase; margin-bottom:8px;}
+  .task-text{ font-size:23px; font-weight:800; line-height:1.3;}
+  .next-preview{ color:var(--text-dim); font-size:13px; margin-top:14px;}
+
+  .progress-dots{ display:flex; gap:5px; justify-content:center; flex-wrap:wrap; margin:6px 0 18px;}
+  .dot{ width:7px; height:7px; border-radius:50%; background:var(--line);}
+  .dot.done{ background:var(--teal);}
+  .dot.now{ background:var(--amber); width:9px; height:9px; }
+
+  .controls-row{ display:flex; gap:10px; margin-top:auto; padding-top:10px;}
+  .ctrl-btn{
+    flex:1; background:var(--bg-card); border:1px solid var(--line); color:var(--text);
+    border-radius:14px; padding:16px 8px; font-size:14px; font-weight:700; cursor:pointer;
+  }
+  .ctrl-btn.wide{ flex:2; background:var(--teal); color:var(--ink); border:none;}
+  .ctrl-btn.wide.paused{ background:var(--amber); }
+
+  .finish-screen{ flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; gap:10px;}
+  .finish-screen .big-check{ font-size:52px; }
+  .finish-stats{ color:var(--text-dim); font-size:14px; margin-bottom:18px;}
+
+  .voice-note{
+    display:flex; gap:10px; align-items:flex-start; background:var(--bg-elevated);
+    border:1px solid var(--line); border-radius:12px; padding:12px 14px; margin-bottom:18px;
+    font-size:12.5px; color:var(--text-dim); line-height:1.5;
+  }
+  .voice-note b{ color:var(--text); }
+
+  /* ---- Spare time flow ---- */
+  .time-chip-grid{ display:flex; flex-wrap:wrap; gap:8px; }
+  .time-chip{
+    background:var(--bg-card); border:1px solid var(--line); color:var(--text);
+    border-radius:12px; padding:14px 10px; font-size:14px; font-weight:700; cursor:pointer;
+    flex:1 1 28%; text-align:center; user-select:none;
+  }
+  .time-chip.active{ background:var(--amber); color:var(--ink); border-color:var(--amber); }
+
+  .task-pick-card{
+    background:var(--bg-card); border:1px solid var(--line); border-radius:var(--radius);
+    padding:14px 16px; display:flex; align-items:center; gap:12px; cursor:pointer;
+    user-select:none; transition:border-color .15s;
+  }
+  .task-pick-card:active{ border-color:var(--teal); }
+  .task-pick-icon{ font-size:22px; width:28px; text-align:center; }
+  .task-pick-meta{ flex:1; min-width:0; }
+  .task-pick-name{ font-weight:700; font-size:16px; }
+  .task-pick-sub{ color:var(--text-dim); font-size:12.5px; margin-top:1px; }
+  .task-pick-time{ font-variant-numeric: tabular-nums; color:var(--amber); font-weight:700; font-size:13px; white-space:nowrap; }
+  .empty-note{
+    color:var(--text-dim); font-size:13.5px; background:var(--bg-elevated);
+    border:1px solid var(--line); border-radius:12px; padding:14px 16px; line-height:1.5;
+  }
+
+  @media (prefers-reduced-motion: reduce){ *{ transition:none !important; } }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- SCREEN 1: ROOM SELECT -->
+  <div class="screen active" id="screen-rooms">
+    <header class="topbar">
+      <div class="eyebrow">Room Ops</div>
+      <h1 class="title">Pick your rooms</h1>
+      <p class="sub">Tap a room to include it in this run. Drag the handle on the right to reorder rooms — your order is remembered.</p>
+    </header>
+
+    <div class="voice-note">
+      🎧 <div><b>Before you start:</b> open your music or podcast in another app and press play. This guide speaks each task aloud and will interrupt your audio briefly, then hand it back.</div>
+    </div>
+
+    <div class="room-list" id="roomList"></div>
+
+    <div class="row-actions">
+      <button class="link-btn" id="selectAllBtn">Select all</button>
+      <button class="link-btn" id="selectNoneBtn">Clear</button>
+    </div>
+
+    <div class="footer-actions">
+      <button class="primary-btn" id="toSettingsBtn">Next: customise tasks</button>
+      <button class="ghost-btn" id="toSpareTimeBtn">⏳ Spare time?</button>
+    </div>
+  </div>
+
+  <!-- SCREEN 1B: SPARE TIME — HOW LONG -->
+  <div class="screen" id="screen-spare-time">
+    <header class="topbar">
+      <div class="eyebrow">Room Ops</div>
+      <h1 class="title">Spare time?</h1>
+      <p class="sub">How long have you got? Pick the nearest, or set your own below.</p>
+    </header>
+
+    <div class="voice-note">
+      🎧 <div><b>Same deal as usual:</b> get your music or podcast going, then start. This will duck in briefly to talk you through it.</div>
+    </div>
+
+    <div class="time-chip-grid" id="timeChipGrid"></div>
+
+    <div class="settings-block" style="margin-top:18px;">
+      <div class="settings-label">Or enter your own</div>
+      <input type="number" min="5" max="240" step="5" class="text-input" id="customMinutesInput" placeholder="Minutes, e.g. 40" inputmode="numeric">
+    </div>
+
+    <div class="footer-actions">
+      <button class="primary-btn" id="spareContinueBtn">Show me what fits</button>
+      <button class="ghost-btn" id="spareBackBtn">Back</button>
+    </div>
+  </div>
+
+  <!-- SCREEN 1C: SPARE TIME — WHICH TASK -->
+  <div class="screen" id="screen-spare-tasks">
+    <header class="topbar">
+      <div class="eyebrow">Room Ops</div>
+      <h1 class="title">Which needs doing the most?</h1>
+      <p class="sub" id="spareTasksSub">Tap the one that's bugging you most.</p>
+    </header>
+
+    <div class="room-list" id="spareTaskList"></div>
+
+    <div class="footer-actions">
+      <button class="ghost-btn" id="spareTasksBackBtn">Change my time</button>
+    </div>
+  </div>
+
+  <!-- SCREEN 2: SETTINGS -->
+  <div class="screen" id="screen-settings">
+    <header class="topbar">
+      <div class="eyebrow">Room Ops</div>
+      <h1 class="title">Customise the run</h1>
+      <p class="sub">Cut anything you don't need today, and set the pace.</p>
+    </header>
+
+    <div class="settings-block">
+      <div class="settings-label">Task types</div>
+      <div class="toggle-row" data-toggle="floor">
+        <div><div class="t-label">Hoovering</div><div class="t-sub">Hoover/vacuum steps in every room</div></div>
+        <div class="switch on" data-key="floor"><div class="knob"></div></div>
+      </div>
+      <div class="toggle-row" data-toggle="wipeFloor">
+        <div><div class="t-label">Mopping &amp; floor wiping</div><div class="t-sub">Hard floor wipe-downs (e.g. bathroom)</div></div>
+        <div class="switch on" data-key="wipeFloor"><div class="knob"></div></div>
+      </div>
+      <div class="toggle-row" data-toggle="big">
+        <div><div class="t-label">Bigger tasks</div><div class="t-sub">Dishwasher, laundry — the slower jobs</div></div>
+        <div class="switch on" data-key="big"><div class="knob"></div></div>
+      </div>
+      <div class="toggle-row" data-toggle="putAway">
+        <div><div class="t-label">Final put-away</div><div class="t-sub">5 minutes at the end to put away what you collected as you went</div></div>
+        <div class="switch on" data-key="putAway"><div class="knob"></div></div>
+      </div>
+    </div>
+
+    <div class="settings-block">
+      <div class="settings-label">Spotify control</div>
+      <div class="toggle-row" data-toggle="spotifyEnabled">
+        <div><div class="t-label">Pause Spotify during instructions</div><div class="t-sub">Connect once below, then it's automatic</div></div>
+        <div class="switch" data-key="spotifyEnabled"><div class="knob"></div></div>
+      </div>
+      <div id="spotifyStatus" class="status-note">Checking connection…</div>
+      <div class="settings-label" style="margin-top:14px;">Redirect URI</div>
+      <div class="redirect-row">
+        <span id="redirectUriText"></span>
+        <button class="link-btn" id="copyRedirectBtn">Copy</button>
+      </div>
+      <button class="ghost-btn" id="spotifyConnectBtn" style="margin-top:10px;">Connect Spotify</button>
+      <button class="ghost-btn" id="spotifyDisconnectBtn" style="margin-top:10px; display:none;">Disconnect Spotify</button>
+    </div>
+
+    <div class="settings-block">
+      <div class="settings-label">Pace</div>
+      <div class="seg seg-3">
+        <button data-pace="deeper" id="paceDeeper">Deeper clean</button>
+        <button data-pace="speedy" id="paceSpeedy">Speedy clean</button>
+        <button data-pace="maintenance" id="paceMaintenance">Maintenance</button>
+      </div>
+      <div class="seg-desc" id="paceDesc"></div>
+    </div>
+
+    <div class="estimate-bar">
+      <div><div class="lbl" id="estRoomsLbl">Estimated time</div><div class="num" id="estTime">—</div></div>
+      <div class="lbl" id="estTaskCount">— tasks</div>
+    </div>
+
+    <div class="footer-actions">
+      <button class="primary-btn" id="startRunBtn">Start cleaning</button>
+      <button class="ghost-btn" id="backToRoomsBtn">Back to rooms</button>
+    </div>
+  </div>
+
+  <!-- SCREEN 3: RUN -->
+  <div class="screen" id="screen-run">
+    <div class="run-top">
+      <div class="room-chip"><span id="runRoomIcon">🏠</span><span id="runRoomName">Room</span></div>
+      <button class="end-btn" id="endRunBtn">End run</button>
+    </div>
+
+    <div class="dial-wrap">
+      <svg width="180" height="180" viewBox="0 0 180 180">
+        <circle class="dial-track" cx="90" cy="90" r="80" fill="none" stroke-width="10"/>
+        <circle id="dialProgress" class="dial-progress" cx="90" cy="90" r="80" fill="none" stroke-width="10"
+          stroke-linecap="round" stroke-dasharray="502.4" stroke-dashoffset="0"
+          transform="rotate(-90 90 90)"/>
+      </svg>
+      <div class="dial-time">
+        <div class="num" id="timeNum">0:00</div>
+        <div class="of" id="timeOf">remaining</div>
+      </div>
+    </div>
+
+    <div class="task-card">
+      <div class="task-index" id="taskIndex">Task 1 of 8</div>
+      <div class="task-text" id="taskText">Loading…</div>
+      <div class="next-preview" id="nextPreview"></div>
+    </div>
+
+    <div class="progress-dots" id="progressDots"></div>
+
+    <div class="controls-row">
+      <button class="ctrl-btn" id="backTaskBtn">◀ Back</button>
+      <button class="ctrl-btn wide" id="pauseBtn">Pause</button>
+      <button class="ctrl-btn" id="skipTaskBtn">Skip ▶</button>
+    </div>
+  </div>
+
+  <!-- SCREEN 4: FINISH -->
+  <div class="screen" id="screen-finish">
+    <div class="finish-screen">
+      <div class="big-check">✅</div>
+      <h1 class="title" style="margin:0;">House clean, done</h1>
+      <div class="finish-stats" id="finishStats"></div>
+      <p class="sub" id="finishPraise" style="max-width:340px; text-align:center;"></p>
+      <button class="primary-btn" id="restartBtn" style="max-width:260px;">Start another run</button>
+    </div>
+  </div>
+
+</div>
+
+<!-- Hidden, near-silent looping audio. On iOS in particular, a page that is
+     genuinely playing audio is much less likely to have its JavaScript
+     suspended when the screen locks or the app is backgrounded — this is
+     the same mechanism podcast/audio apps rely on. It is not a guarantee:
+     manually pressing the lock button can still suspend the page on some
+     iOS versions. -->
+<audio id="keepAliveAudio" loop playsinline style="display:none"></audio>
+
+<script>
+/* ==================================================================
+   SEASONAL THEME
+   Applied first so the palette is right from first paint. Uses the
+   meteorological calendar (not astronomical): Winter Dec–Feb,
+   Spring Mar–May, Summer Jun–Aug, Autumn Sep–Nov.
+   ================================================================== */
+function currentSeason(date = new Date()){
+  const m = date.getMonth(); // 0 = Jan
+  if(m===11 || m===0 || m===1) return 'winter';
+  if(m>=2 && m<=4) return 'spring';
+  if(m>=5 && m<=7) return 'summer';
+  return 'autumn';
+}
+document.documentElement.setAttribute('data-season', currentSeason());
+
+/* ==================================================================
+   DATA
+   ================================================================== */
+const ROOMS = [
+  { id:'kitchendining', name:'Kitchen & dining', icon:'🍳', tasks:[
+    {text:'Clear rubbish from the floor', type:'core', cat:'tidy', s:60, c:90},
+    {text:'Clear rubbish from surfaces', type:'core', cat:'tidy', s:60, c:90},
+    {text:'Clear items from the floor', type:'core', cat:'tidy', s:75, c:120},
+    {text:'Clear items from surfaces', type:'core', cat:'tidy', s:120, c:180},
+    {text:'Load or empty the dishwasher', type:'big', s:180, c:300},
+    {text:'Wipe down the counters', type:'core', s:90, c:90},
+    {text:'Wipe down the hob', type:'core', s:60, c:60},
+    {text:'Clean the sink', type:'core', s:60, c:60},
+    {text:'Take out the kitchen bin', type:'core', s:45, c:45},
+    {text:'Wipe the table', type:'core', s:60, c:60},
+    {text:'Dust surfaces', type:'core', s:60, c:60},
+    {text:'Hoover the floor', type:'floor', s:150, c:150},
+    {text:'Wipe or mop the floor', type:'wipeFloor', s:150, c:150},
+  ]},
+  { id:'living', name:'Living room', icon:'🛋️', tasks:[
+    {text:'Clear rubbish from the floor', type:'core', cat:'tidy', s:45, c:75},
+    {text:'Clear rubbish from surfaces', type:'core', cat:'tidy', s:45, c:75},
+    {text:'Clear items from the floor', type:'core', cat:'tidy', s:60, c:90},
+    {text:'Clear items from surfaces', type:'core', cat:'tidy', s:90, c:150},
+    {text:'Dust surfaces', type:'core', s:90, c:90},
+    {text:'Plump cushions and fold throws', type:'core', cat:'tidy', s:45, c:60},
+    {text:'Hoover the floor', type:'floor', s:120, c:120},
+  ]},
+  { id:'bathroom', name:'Bathroom', icon:'🛁', tasks:[
+    {text:'Clear rubbish from the floor', type:'core', cat:'tidy', s:45, c:75},
+    {text:'Clear rubbish from surfaces', type:'core', cat:'tidy', s:45, c:75},
+    {text:'Clear items from the floor', type:'core', cat:'tidy', s:45, c:75},
+    {text:'Clear items from surfaces', type:'core', cat:'tidy', s:60, c:90},
+    {text:'Empty the bin', type:'core', s:30, c:30},
+    {text:'Clean the toilet', type:'core', s:90, c:90},
+    {text:'Clean the shower', type:'core', s:120, c:120},
+    {text:'Clean the bath', type:'core', s:90, c:90},
+    {text:'Clean the sink', type:'core', s:60, c:60},
+    {text:'Hoover the floor', type:'floor', s:60, c:60},
+    {text:'Wipe the floor', type:'wipeFloor', s:60, c:60},
+  ]},
+  { id:'stairs', name:'Stairs', icon:'🪜', tasks:[
+    {text:'Clear items from the stairs', type:'core', cat:'tidy', s:45, c:75},
+    {text:'Hoover the stairs', type:'floor', s:90, c:90},
+  ]},
+  { id:'guest', name:'Guest room / office', icon:'💼', tasks:[
+    {text:'Clear rubbish from the floor', type:'core', cat:'tidy', s:45, c:75},
+    {text:'Clear rubbish from surfaces', type:'core', cat:'tidy', s:45, c:75},
+    {text:'Clear items from the floor', type:'core', cat:'tidy', s:60, c:90},
+    {text:'Clear items from surfaces', type:'core', cat:'tidy', s:90, c:150},
+    {text:'Dust surfaces', type:'core', s:60, c:60},
+    {text:'Empty the study bin', type:'core', s:20, c:20},
+    {text:'Tidy the desk and papers', type:'core', cat:'tidy', s:90, c:150},
+    {text:'Hoover the floor', type:'floor', s:90, c:90},
+  ]},
+  { id:'bedroom', name:'Bedroom', icon:'🛏️', tasks:[
+    {text:'Make the bed', type:'core', s:60, c:60},
+    {text:'Clear rubbish from the floor', type:'core', cat:'tidy', s:45, c:75},
+    {text:'Clear rubbish from surfaces', type:'core', cat:'tidy', s:45, c:75},
+    {text:'Clear items from the floor', type:'core', cat:'tidy', s:60, c:90},
+    {text:'Clear items from surfaces', type:'core', cat:'tidy', s:90, c:150},
+    {text:'Dust surfaces', type:'core', s:60, c:60},
+    {text:'Put on or put away laundry — five minutes', type:'big', s:300, c:300},
+    {text:'Hoover the floor', type:'floor', s:90, c:90},
+  ]},
+];
+
+const WRAP_UP_ROOM = { id:'wrapup', name:'Wrap-up', icon:'🧺', tasks:[
+  {text:'Put away the things you\u2019ve collected as you went along', type:'putAway', cat:'tidy', s:300, c:300},
+]};
+
+const PRAISE = [
+  'That\u2019s the whole house done. Have a look round \u2014 you\u2019ve made a proper difference.',
+  'Brilliant work. Stop for a second and take in what you\u2019ve just done.',
+  'You smashed that. Have a wander round and enjoy the difference.',
+  'Lovely job. Take a moment to look around \u2014 it\u2019s properly transformed.',
+  'Nicely done, that\u2019s a clean house. Go on, have a look at what you\u2019ve achieved.',
+  'Cracking effort. Walk round and notice how different it feels.',
+  'All done \u2014 and it shows. Take a minute to appreciate it.',
+  'Fantastic work. Have a look around before you sit down \u2014 you\u2019ve earned it.',
+];
+
+/* ==================================================================
+   SPARE TIME TASKS
+   One-off household jobs that don't fit the day-to-day room run.
+   Each has a short script of steps — an opener, some guidance/encouragement
+   spoken partway through (with music/silence in between), and a tailored
+   congratulations line spoken and shown at the end.
+   ================================================================== */
+const SPARE_TASKS = [
+  { id:'wardrobe', name:'Clear out the wardrobe', icon:'👗', steps:[
+    {text:'Right, let\u2019s get this wardrobe sorted. Pull everything out onto the bed \u2014 yes, everything.', s:480},
+    {text:'Now, three piles: keep, charity, and bin. If you haven\u2019t worn it this year, be honest with yourself.', s:1200},
+    {text:'Halfway there. Hang the keepers back neatly, and bag up anything for charity or Vinted while you\u2019re at it.', s:1200},
+    {text:'Nearly done \u2014 give the wardrobe floor and shelves a quick wipe now everything\u2019s out of the way.', s:600},
+    {text:'Last bit \u2014 pop the keep pile back in properly, and take the charity bags straight to the car or the door so they don\u2019t creep back in.', s:1020},
+  ], congrats:'Wardrobe done, and probably a couple of bags lighter. That\u2019s a proper reset \u2014 well done.'},
+
+  { id:'bedroomdrawer', name:'Clear out a bedroom drawer', icon:'🗄️', steps:[
+    {text:'Tip the whole drawer out onto the bed so you can see everything at once.', s:120},
+    {text:'Sort into keep, bin, and donate \u2014 quick decisions are fine, you don\u2019t need to deliberate over socks.', s:480},
+    {text:'Refold and pop the keepers back in, and bag up the rest before you talk yourself out of it.', s:300},
+  ], congrats:'One drawer down, closes properly again and everything. Nice quick win.'},
+
+  { id:'kitchendrawer', name:'Clear out a kitchen drawer', icon:'🍴', steps:[
+    {text:'Empty the drawer completely onto the counter.', s:120},
+    {text:'Wipe the inside out, then sort what\u2019s left into keep and bin \u2014 you probably don\u2019t need four garlic crushers.', s:480},
+    {text:'Load it back in properly, grouping like with like so it stays tidy longer.', s:300},
+  ], congrats:'Drawer sorted and wiped out \u2014 small job, proper difference.'},
+
+  { id:'kitchencupboard', name:'Clear out a kitchen cupboard', icon:'🥫', steps:[
+    {text:'Take everything out of the cupboard and give it a quick sort by category as you go.', s:300},
+    {text:'Check dates \u2014 anything out of date, or you know you\u2019ll never use, into the bin or the food bank pile.', s:600},
+    {text:'Wipe the shelves down while it\u2019s empty \u2014 this is the bit everyone skips normally.', s:300},
+    {text:'Load it back in with the stuff you use most within easy reach.', s:300},
+  ], congrats:'Cupboard sorted, wiped, and you can actually see what\u2019s in there now.'},
+
+  { id:'vinted', name:'List items on Vinted', icon:'📦', steps:[
+    {text:'Grab the items you want to list and lay them out somewhere with decent light.', s:300},
+    {text:'Photograph each one \u2014 front, back, any flaws, and the label. Natural light near a window works best.', s:720},
+    {text:'Now write the listings \u2014 brief, honest description, measurements, and a fair price. Don\u2019t overthink it.', s:1080},
+    {text:'Post them live, and check for any bundle offers if you\u2019ve got similar items already up.', s:300},
+  ], congrats:'Listings live \u2014 that\u2019s money on its way and stuff out of the house. Good use of your time.'},
+
+  { id:'bathroomshelf', name:'Clear out a bathroom shelf', icon:'🧴', steps:[
+    {text:'Clear everything off the shelf so you can see what\u2019s actually there.', s:120},
+    {text:'Bin anything empty, out of date, or you\u2019re never going to use \u2014 be ruthless with the sample sachets.', s:480},
+    {text:'Wipe the shelf down and put the keepers back, grouped by what they\u2019re for.', s:300},
+  ], congrats:'Shelf sorted \u2014 no more digging through half-empty bottles to find the shampoo.'},
+
+  { id:'skirting', name:'Wipe down the skirting boards', icon:'🧽', steps:[
+    {text:'Grab a damp cloth or a duster on a pole, and start in the room you\u2019re in \u2014 work along the skirting board in one direction.', s:600},
+    {text:'Keep going room to room. This is a proper dust-trap job, so don\u2019t be surprised how much comes off.', s:900},
+    {text:'Last stretch \u2014 finish up wherever you are and give the cloth a rinse.', s:600},
+  ], congrats:'Skirting boards done throughout \u2014 one of those jobs nobody notices until it\u2019s not done.'},
+
+  { id:'fridge', name:'Clean the fridge', icon:'🧊', steps:[
+    {text:'Empty the fridge completely, and bin anything out of date while it\u2019s all out on the side.', s:480},
+    {text:'Take out the shelves and drawers if they\u2019ll come, and give them a wash in the sink.', s:720},
+    {text:'Wipe down the inside of the fridge itself, including the door seals \u2014 that\u2019s where most of the grime hides.', s:720},
+    {text:'Dry everything, put the shelves back, and reload the fridge \u2014 oldest stuff to the front.', s:480},
+  ], congrats:'Fridge properly clean and reorganised \u2014 should smell better too.'},
+
+  { id:'freezer', name:'Defrost the freezer', icon:'❄️', steps:[
+    {text:'Unplug the freezer, take everything out, and pack it into cool bags with an ice pack \u2014 this stays out for a while, so batch it up now.', s:600},
+    {text:'Prop the door open with towels underneath to catch the melt, and now you wait. Go and do something else \u2014 this is the slow bit.', s:2400},
+    {text:'Check in \u2014 most of the ice should be loosening up now. You can gently help bigger chunks along, but don\u2019t hack at it with anything sharp.', s:1800},
+    {text:'Once the ice has cleared, wipe the inside out completely, mop up the towels, and dry it thoroughly before it goes back on.', s:1200},
+    {text:'Plug it back in, give it a few minutes to start cooling, then reload the food \u2014 oldest stuff to the front.', s:600},
+  ], congrats:'Freezer defrosted, wiped out, and back up and running \u2014 that\u2019s the whole thing sorted for months.'},
+
+  { id:'jewellery', name:'Tidy the jewellery box', icon:'💍', steps:[
+    {text:'Tip everything out and untangle the chains first \u2014 that\u2019s the fiddly bit, get it out of the way.', s:480},
+    {text:'Sort into what you actually wear, what needs fixing, and what you\u2019re done with.', s:420},
+    {text:'Put the keepers back in an order that makes sense, and set the fixing pile somewhere you\u2019ll actually deal with it.', s:180},
+  ], congrats:'Jewellery box tidy and untangled \u2014 future you says thank you.'},
+
+  { id:'coatrack', name:'Tidy the coat rack', icon:'🧥', steps:[
+    {text:'Take everything off the rack or hooks and have a proper look at what\u2019s there.', s:180},
+    {text:'Be honest \u2014 coats you haven\u2019t worn this season, or ones that don\u2019t fit, go in a bag for charity.', s:480},
+    {text:'Hang the keepers back up properly, most-used nearest the door.', s:240},
+  ], congrats:'Coat rack tidy \u2014 should actually be easy to grab your coat and go now.'},
+
+  { id:'oven', name:'Clean the oven', icon:'🔥', steps:[
+    {text:'Take out the racks and trays, and get them soaking in hot water with washing up liquid or an oven cleaner while you crack on with the rest.', s:480},
+    {text:'Apply oven cleaner to the inside of the oven, following the instructions on the bottle, then leave it to work.', s:420},
+    {text:'While that\u2019s working, this is a good stretch to leave it and let the product do the job \u2014 go and put the kettle on.', s:1500},
+    {text:'Back to it \u2014 wipe out the inside thoroughly, it should come away much easier now.', s:900},
+    {text:'Scrub the racks and trays, rinse everything off, dry it, and put it all back in.', s:600},
+  ], congrats:'Oven properly clean \u2014 that first roast dinner in a clean oven is going to feel great.'},
+
+  { id:'kettle', name:'Descale the kettle', icon:'♨️', steps:[
+    {text:'Fill the kettle with equal parts water and white vinegar, or a descaling sachet if you\u2019ve got one, and bring it to the boil.', s:300},
+    {text:'Leave it to sit and do its work \u2014 go and do something else for a bit.', s:720},
+    {text:'Empty it out, rinse thoroughly a couple of times, and boil once more with plain water before you use it for tea.', s:180},
+  ], congrats:'Kettle descaled \u2014 your tea\u2019s about to taste noticeably better.'},
+
+  { id:'microwave', name:'Clean the microwave', icon:'📡', steps:[
+    {text:'Pop a bowl of water with a splash of lemon juice or vinegar in the microwave and run it for a few minutes until it\u2019s steamy.', s:300},
+    {text:'Leave the door shut for a couple of minutes so the steam can loosen everything stuck on.', s:180},
+    {text:'Wipe the inside out \u2014 it should come away easily now \u2014 and give the turntable a wash.', s:420},
+  ], congrats:'Microwave clean inside and out \u2014 no more mystery splatters.'},
+
+  { id:'shoerack', name:'Sort the shoe rack / hallway', icon:'👟', steps:[
+    {text:'Pull everything off the rack and have a proper look at what\u2019s actually there.', s:180},
+    {text:'Pair everything up, and anything odd, worn out, or unworn for a year goes in a bag.', s:600},
+    {text:'Wipe down the rack itself and put the keepers back in a sensible order.', s:300},
+  ], congrats:'Hallway shoe rack sorted \u2014 one less thing to trip over on the way out.'},
+
+  { id:'coffeemachine', name:'Descale the Stilosa', icon:'☕', steps:[
+    {text:'Take the water tank out, empty it, and fill it with descaling solution mixed to the ratio on the bottle. The Stilosa doesn\u2019t take a water filter cartridge, so this is really about the descale.', s:180},
+    {text:'Pop the tank back in, attach the empty portafilter with no coffee in it, and put a big container under the spouts. Turn the selector dial on and let about half the tank run through the coffee spouts.', s:240},
+    {text:'Now turn the steam dial round to run the rest of the tank through the steam wand instead. Turn everything back off once it\u2019s through.', s:240},
+    {text:'Leave it to stand for ten minutes or so \u2014 this gives the solution time to work on any scale in the boiler. Go and do something else.', s:600},
+    {text:'While that\u2019s resting, give the portafilter and the one and two-cup filter baskets a proper scrub in hot soapy water \u2014 there\u2019s no cartridge to swap on this machine, so this is the closest thing to changing the filter.', s:300},
+    {text:'Empty the tank, rinse it out properly, and refill with plain water. Run it through the spouts and the steam wand again, twice, to flush out any leftover solution before you make a coffee.', s:420},
+  ], congrats:'Stilosa descaled, portafilter scrubbed, and flushed through \u2014 that next espresso should pull properly again.'},
+];
+
+/* ==================================================================
+   SPOTIFY CONFIG (hard-coded — no user setup required)
+   ================================================================== */
+const SPOTIFY_CLIENT_ID = 'c2d2c0268ffb484bbe716c2d95feb469';
+const SPOTIFY_REDIRECT_URI = 'https://annieapps.github.io/Rommelruimers/';
+const SPOTIFY_SCOPES = 'user-modify-playback-state user-read-playback-state';
+
+/* A tiny, near-silent looping WAV (0.25s, ~40/32767 amplitude). Used only to
+   help keep the tab's JavaScript alive on mobile browsers while a run is in
+   progress -- see the KeepAlive helpers below for why. */
+const KEEPALIVE_AUDIO_SRC = 'data:audio/wav;base64,UklGRsQPAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YaAPAAAAAAEAAgADAAUABgAHAAgACQALAAwADQAOAA8AEQASABMAFAAVABYAFwAYABkAGgAbABwAHQAeAB4AHwAgACEAIQAiACMAIwAkACQAJQAlACYAJgAmACcAJwAnACcAJwAnACcAKAAnACcAJwAnACcAJwAnACYAJgAmACUAJQAkACQAIwAjACIAIQAhACAAHwAeAB4AHQAcABsAGgAZABgAFwAWABUAFAATABIAEQAPAA4ADQAMAAsACQAIAAcABgAFAAMAAgABAAAA///+//3/+//6//n/+P/3//X/9P/z//L/8f/v/+7/7f/s/+v/6v/p/+j/5//m/+X/5P/j/+L/4v/h/+D/3//f/97/3f/d/9z/3P/b/9v/2v/a/9r/2f/Z/9n/2f/Z/9n/2f/Y/9n/2f/Z/9n/2f/Z/9n/2v/a/9r/2//b/9z/3P/d/93/3v/f/9//4P/h/+L/4v/j/+T/5f/m/+f/6P/p/+r/6//s/+3/7v/v//H/8v/z//T/9f/3//j/+f/6//v//f/+////AAABAAIAAwAFAAYABwAIAAkACwAMAA0ADgAPABEAEgATABQAFQAWABcAGAAZABoAGwAcAB0AHgAeAB8AIAAhACEAIgAjACMAJAAkACUAJQAmACYAJgAnACcAJwAnACcAJwAnACgAJwAnACcAJwAnACcAJwAmACYAJgAlACUAJAAkACMAIwAiACEAIQAgAB8AHgAeAB0AHAAbABoAGQAYABcAFgAVABQAEwASABEADwAOAA0ADAALAAkACAAHAAYABQADAAIAAQAAAP///v/9//v/+v/5//j/9//1//T/8//y//H/7//u/+3/7P/r/+r/6f/o/+f/5v/l/+T/4//i/+L/4f/g/9//3//e/93/3f/c/9z/2//b/9r/2v/a/9n/2f/Z/9n/2f/Z/9n/2P/Z/9n/2f/Z/9n/2f/Z/9r/2v/a/9v/2//c/9z/3f/d/97/3//f/+D/4f/i/+L/4//k/+X/5v/n/+j/6f/q/+v/7P/t/+7/7//x//L/8//0//X/9//4//n/+v/7//3//v///wAAAQACAAMABQAGAAcACAAJAAsADAANAA4ADwARABIAEwAUABUAFgAXABgAGQAaABsAHAAdAB4AHgAfACAAIQAhACIAIwAjACQAJAAlACUAJgAmACYAJwAnACcAJwAnACcAJwAoACcAJwAnACcAJwAnACcAJgAmACYAJQAlACQAJAAjACMAIgAhACEAIAAfAB4AHgAdABwAGwAaABkAGAAXABYAFQAUABMAEgARAA8ADgANAAwACwAJAAgABwAGAAUAAwACAAEAAAD///7//f/7//r/+f/4//f/9f/0//P/8v/x/+//7v/t/+z/6//q/+n/6P/n/+b/5f/k/+P/4v/i/+H/4P/f/9//3v/d/93/3P/c/9v/2//a/9r/2v/Z/9n/2f/Z/9n/2f/Z/9j/2f/Z/9n/2f/Z/9n/2f/a/9r/2v/b/9v/3P/c/93/3f/e/9//3//g/+H/4v/i/+P/5P/l/+b/5//o/+n/6v/r/+z/7f/u/+//8f/y//P/9P/1//f/+P/5//r/+//9//7///8AAAEAAgADAAUABgAHAAgACQALAAwADQAOAA8AEQASABMAFAAVABYAFwAYABkAGgAbABwAHQAeAB4AHwAgACEAIQAiACMAIwAkACQAJQAlACYAJgAmACcAJwAnACcAJwAnACcAKAAnACcAJwAnACcAJwAnACYAJgAmACUAJQAkACQAIwAjACIAIQAhACAAHwAeAB4AHQAcABsAGgAZABgAFwAWABUAFAATABIAEQAPAA4ADQAMAAsACQAIAAcABgAFAAMAAgABAAAA///+//3/+//6//n/+P/3//X/9P/z//L/8f/v/+7/7f/s/+v/6v/p/+j/5//m/+X/5P/j/+L/4v/h/+D/3//f/97/3f/d/9z/3P/b/9v/2v/a/9r/2f/Z/9n/2f/Z/9n/2f/Y/9n/2f/Z/9n/2f/Z/9n/2v/a/9r/2//b/9z/3P/d/93/3v/f/9//4P/h/+L/4v/j/+T/5f/m/+f/6P/p/+r/6//s/+3/7v/v//H/8v/z//T/9f/3//j/+f/6//v//f/+////AAABAAIAAwAFAAYABwAIAAkACwAMAA0ADgAPABEAEgATABQAFQAWABcAGAAZABoAGwAcAB0AHgAeAB8AIAAhACEAIgAjACMAJAAkACUAJQAmACYAJgAnACcAJwAnACcAJwAnACgAJwAnACcAJwAnACcAJwAmACYAJgAlACUAJAAkACMAIwAiACEAIQAgAB8AHgAeAB0AHAAbABoAGQAYABcAFgAVABQAEwASABEADwAOAA0ADAALAAkACAAHAAYABQADAAIAAQAAAP///v/9//v/+v/5//j/9//1//T/8//y//H/7//u/+3/7P/r/+r/6f/o/+f/5v/l/+T/4//i/+L/4f/g/9//3//e/93/3f/c/9z/2//b/9r/2v/a/9n/2f/Z/9n/2f/Z/9n/2P/Z/9n/2f/Z/9n/2f/Z/9r/2v/a/9v/2//c/9z/3f/d/97/3//f/+D/4f/i/+L/4//k/+X/5v/n/+j/6f/q/+v/7P/t/+7/7//x//L/8//0//X/9//4//n/+v/7//3//v///wAAAQACAAMABQAGAAcACAAJAAsADAANAA4ADwARABIAEwAUABUAFgAXABgAGQAaABsAHAAdAB4AHgAfACAAIQAhACIAIwAjACQAJAAlACUAJgAmACYAJwAnACcAJwAnACcAJwAoACcAJwAnACcAJwAnACcAJgAmACYAJQAlACQAJAAjACMAIgAhACEAIAAfAB4AHgAdABwAGwAaABkAGAAXABYAFQAUABMAEgARAA8ADgANAAwACwAJAAgABwAGAAUAAwACAAEAAAD///7//f/7//r/+f/4//f/9f/0//P/8v/x/+//7v/t/+z/6//q/+n/6P/n/+b/5f/k/+P/4v/i/+H/4P/f/9//3v/d/93/3P/c/9v/2//a/9r/2v/Z/9n/2f/Z/9n/2f/Z/9j/2f/Z/9n/2f/Z/9n/2f/a/9r/2v/b/9v/3P/c/93/3f/e/9//3//g/+H/4v/i/+P/5P/l/+b/5//o/+n/6v/r/+z/7f/u/+//8f/y//P/9P/1//f/+P/5//r/+//9//7///8AAAEAAgADAAUABgAHAAgACQALAAwADQAOAA8AEQASABMAFAAVABYAFwAYABkAGgAbABwAHQAeAB4AHwAgACEAIQAiACMAIwAkACQAJQAlACYAJgAmACcAJwAnACcAJwAnACcAKAAnACcAJwAnACcAJwAnACYAJgAmACUAJQAkACQAIwAjACIAIQAhACAAHwAeAB4AHQAcABsAGgAZABgAFwAWABUAFAATABIAEQAPAA4ADQAMAAsACQAIAAcABgAFAAMAAgABAAAA///+//3/+//6//n/+P/3//X/9P/z//L/8f/v/+7/7f/s/+v/6v/p/+j/5//m/+X/5P/j/+L/4v/h/+D/3//f/97/3f/d/9z/3P/b/9v/2v/a/9r/2f/Z/9n/2f/Z/9n/2f/Y/9n/2f/Z/9n/2f/Z/9n/2v/a/9r/2//b/9z/3P/d/93/3v/f/9//4P/h/+L/4v/j/+T/5f/m/+f/6P/p/+r/6//s/+3/7v/v//H/8v/z//T/9f/3//j/+f/6//v//f/+////AAABAAIAAwAFAAYABwAIAAkACwAMAA0ADgAPABEAEgATABQAFQAWABcAGAAZABoAGwAcAB0AHgAeAB8AIAAhACEAIgAjACMAJAAkACUAJQAmACYAJgAnACcAJwAnACcAJwAnACgAJwAnACcAJwAnACcAJwAmACYAJgAlACUAJAAkACMAIwAiACEAIQAgAB8AHgAeAB0AHAAbABoAGQAYABcAFgAVABQAEwASABEADwAOAA0ADAALAAkACAAHAAYABQADAAIAAQAAAP///v/9//v/+v/5//j/9//1//T/8//y//H/7//u/+3/7P/r/+r/6f/o/+f/5v/l/+T/4//i/+L/4f/g/9//3//e/93/3f/c/9z/2//b/9r/2v/a/9n/2f/Z/9n/2f/Z/9n/2P/Z/9n/2f/Z/9n/2f/Z/9r/2v/a/9v/2//c/9z/3f/d/97/3//f/+D/4f/i/+L/4//k/+X/5v/n/+j/6f/q/+v/7P/t/+7/7//x//L/8//0//X/9//4//n/+v/7//3//v///wAAAQACAAMABQAGAAcACAAJAAsADAANAA4ADwARABIAEwAUABUAFgAXABgAGQAaABsAHAAdAB4AHgAfACAAIQAhACIAIwAjACQAJAAlACUAJgAmACYAJwAnACcAJwAnACcAJwAoACcAJwAnACcAJwAnACcAJgAmACYAJQAlACQAJAAjACMAIgAhACEAIAAfAB4AHgAdABwAGwAaABkAGAAXABYAFQAUABMAEgARAA8ADgANAAwACwAJAAgABwAGAAUAAwACAAEAAAD///7//f/7//r/+f/4//f/9f/0//P/8v/x/+//7v/t/+z/6//q/+n/6P/n/+b/5f/k/+P/4v/i/+H/4P/f/9//3v/d/93/3P/c/9v/2//a/9r/2v/Z/9n/2f/Z/9n/2f/Z/9j/2f/Z/9n/2f/Z/9n/2f/a/9r/2v/b/9v/3P/c/93/3f/e/9//3//g/+H/4v/i/+P/5P/l/+b/5//o/+n/6v/r/+z/7f/u/+//8f/y//P/9P/1//f/+P/5//r/+//9//7///8AAAEAAgADAAUABgAHAAgACQALAAwADQAOAA8AEQASABMAFAAVABYAFwAYABkAGgAbABwAHQAeAB4AHwAgACEAIQAiACMAIwAkACQAJQAlACYAJgAmACcAJwAnACcAJwAnACcAKAAnACcAJwAnACcAJwAnACYAJgAmACUAJQAkACQAIwAjACIAIQAhACAAHwAeAB4AHQAcABsAGgAZABgAFwAWABUAFAATABIAEQAPAA4ADQAMAAsACQAIAAcABgAFAAMAAgABAAAA///+//3/+//6//n/+P/3//X/9P/z//L/8f/v/+7/7f/s/+v/6v/p/+j/5//m/+X/5P/j/+L/4v/h/+D/3//f/97/3f/d/9z/3P/b/9v/2v/a/9r/2f/Z/9n/2f/Z/9n/2f/Y/9n/2f/Z/9n/2f/Z/9n/2v/a/9r/2//b/9z/3P/d/93/3v/f/9//4P/h/+L/4v/j/+T/5f/m/+f/6P/p/+r/6//s/+3/7v/v//H/8v/z//T/9f/3//j/+f/6//v//f/+////';
+
+/* ==================================================================
+   STATE
+   ================================================================== */
+let selectedRooms = new Set(ROOMS.map(r=>r.id));
+let roomOrder = ROOMS.map(r=>r.id); // custom order, persisted independently of selection
+let settings = { floor:true, wipeFloor:true, big:true, putAway:true, spotifyEnabled:false, pace:'speedy' };
+let queue = [];        // flattened, filtered task list for the run
+let qIndex = 0;
+let secondsLeft = 0;
+let taskSeconds = 0;
+let taskEndAt = 0;         // timestamp (ms) the current task should end at
+let pausedRemainingMs = 0; // remaining ms captured at the moment of pausing
+let timerHandle = null;
+let paused = false;
+let runStartTime = null;
+let runInProgress = false;
+let wakeLock = null;
+let currentMode = 'clean';   // 'clean' (room run) or 'spare' (one-off spare-time task)
+let spareMinutes = 30;       // how long the user said they have
+let activeSpareTask = null;  // the SPARE_TASKS entry currently running, if any
+
+/* ==================================================================
+   STORAGE
+   ================================================================== */
+async function storageGet(key){
+  try{
+    if(window.storage){
+      const r = await window.storage.get(key, false);
+      return r ? r.value : null;
+    }
+  }catch(e){ /* not found in window.storage, or unavailable */ }
+  try{ return localStorage.getItem(key); }catch(e){ return null; }
+}
+async function storageSet(key, value){
+  try{
+    if(window.storage){ await window.storage.set(key, value, false); return; }
+  }catch(e){}
+  try{ localStorage.setItem(key, value); }catch(e){}
+}
+async function loadSettings(){
+  const raw = await storageGet('settings');
+  if(raw){
+    try{ settings = Object.assign(settings, JSON.parse(raw)); }catch(e){}
+  }
+  if(settings.pace==='strict') settings.pace='speedy';
+  if(settings.pace==='conservative') settings.pace='deeper';
+}
+async function saveSettings(){
+  await storageSet('settings', JSON.stringify(settings));
+}
+async function loadRoomOrder(){
+  const raw = await storageGet('room_order');
+  if(raw){
+    try{
+      const stored = JSON.parse(raw);
+      if(Array.isArray(stored) && stored.length){
+        const validIds = new Set(ROOMS.map(r=>r.id));
+        const cleaned = stored.filter(id=>validIds.has(id));
+        // append any rooms not present in the stored order (e.g. newly added rooms)
+        ROOMS.forEach(r=>{ if(!cleaned.includes(r.id)) cleaned.push(r.id); });
+        roomOrder = cleaned;
+      }
+    }catch(e){}
+  }
+}
+async function saveRoomOrder(){
+  await storageSet('room_order', JSON.stringify(roomOrder));
+}
+
+/* ==================================================================
+   HELPERS
+   ================================================================== */
+function fmtMin(totalSeconds){
+  const m = Math.round(totalSeconds/60);
+  return m + ' min';
+}
+function fmtClock(totalSeconds){
+  const m = Math.floor(totalSeconds/60);
+  const s = totalSeconds%60;
+  return m + ':' + String(s).padStart(2,'0');
+}
+function taskAllowed(t){
+  if(t.type==='floor') return settings.floor;
+  if(t.type==='wipeFloor') return settings.wipeFloor;
+  if(t.type==='big') return settings.big;
+  if(t.type==='putAway') return settings.putAway;
+  return true;
+}
+function taskDuration(t){
+  if(settings.pace==='maintenance'){
+    // House is assumed fairly tidy: pick-up/put-away style tasks take half as long.
+    // Everything else (wiping, cleaning, hoovering, bigger jobs) takes the same
+    // amount of time whether the place is messy or not, so it stays at full pace.
+    if(t.cat==='tidy') return Math.max(15, Math.round(t.s/2));
+    return t.s;
+  }
+  return settings.pace==='speedy' ? t.s : t.c;
+}
+
+function roomFilteredTasks(room){ return room.tasks.filter(taskAllowed); }
+function roomEstimate(room){ return roomFilteredTasks(room).reduce((sum,t)=>sum+taskDuration(t),0); }
+
+function orderedRooms(){
+  const byId = new Map(ROOMS.map(r=>[r.id, r]));
+  const ordered = roomOrder.map(id=>byId.get(id)).filter(Boolean);
+  // safety net: include any room somehow missing from roomOrder
+  ROOMS.forEach(r=>{ if(!ordered.includes(r)) ordered.push(r); });
+  return ordered;
+}
+
+function buildQueue(){
+  queue = [];
+  orderedRooms().filter(r=>selectedRooms.has(r.id)).forEach(room=>{
+    const tasks = roomFilteredTasks(room);
+    tasks.forEach((t,i)=>{
+      queue.push({
+        room, task:t,
+        isFirstInRoom: i===0,
+        duration: taskDuration(t),
+      });
+    });
+  });
+  if(queue.length>0 && settings.putAway){
+    const t = WRAP_UP_ROOM.tasks[0];
+    queue.push({ room:WRAP_UP_ROOM, task:t, isFirstInRoom:true, duration: taskDuration(t) });
+  }
+}
+
+function sleep(ms){ return new Promise(resolve=>setTimeout(resolve, ms)); }
+
+/* ==================================================================
+   BACKGROUND RELIABILITY (Screen Wake Lock + keep-alive audio)
+
+   Neither of these can override you manually pressing the phone's lock
+   button — no web page can. What they do:
+     - Wake Lock stops the screen from auto-locking on its own while a run
+       is active, which covers the common "walked off and it timed out"
+       case.
+     - The near-silent looping audio gives the browser a genuine reason to
+       keep the tab's JavaScript running if the app does get backgrounded
+       or the screen does lock, which materially improves (but does not
+       guarantee) that timers/speech/Spotify calls keep firing.
+   ================================================================== */
+async function requestWakeLock(){
+  try{
+    if('wakeLock' in navigator){
+      wakeLock = await navigator.wakeLock.request('screen');
+      wakeLock.addEventListener('release', ()=>{ wakeLock = null; });
+    }
+  }catch(e){ wakeLock = null; }
+}
+async function releaseWakeLock(){
+  try{ if(wakeLock){ await wakeLock.release(); } }catch(e){}
+  wakeLock = null;
+}
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState === 'visible' && runInProgress && !wakeLock){
+    requestWakeLock();
+  }
+});
+
+function startKeepAliveAudio(){
+  try{
+    const el = document.getElementById('keepAliveAudio');
+    if(!el.src) el.src = KEEPALIVE_AUDIO_SRC;
+    el.volume = 1.0; // the source waveform itself is already near-silent
+    el.play().catch(()=>{});
+  }catch(e){}
+}
+function stopKeepAliveAudio(){
+  try{
+    const el = document.getElementById('keepAliveAudio');
+    el.pause();
+    el.currentTime = 0;
+  }catch(e){}
+}
+
+/* ==================================================================
+   AUDIO SEQUENCER
+   Robust, race-free sequencing:
+     1. pause Spotify
+     2. confirm/allow time for pause
+     3. short delay
+     4. chime
+     5. speak instruction (genuine completion, not just onend)
+     6. short delay
+     7. resume Spotify (only if we actually paused it)
+   Every call to run() invalidates any previous in-flight sequence, so
+   Skip / Back / Pause can never cause overlapping speech or commands.
+   ================================================================== */
+const AudioSeq = (function(){
+  let genToken = 0;
+  let audioCtx = null;
+  let pausedByUs = false;
+  let unlocked = false;
+  let keepAliveTimer = null;
+
+  function ensureCtx(){
+    if(!audioCtx){
+      try{ audioCtx = new (window.AudioContext||window.webkitAudioContext)(); }
+      catch(e){ audioCtx = null; }
+    }
+    if(audioCtx && audioCtx.state === 'suspended'){
+      audioCtx.resume().catch(()=>{});
+    }
+    return audioCtx;
+  }
+
+  function playChime(freq){
+    return new Promise(resolve=>{
+      const ctx = ensureCtx();
+      if(!ctx){ resolve(); return; }
+      try{
+        const dur = 0.16;
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.frequency.value = freq;
+        o.type = 'sine';
+        g.gain.setValueAtTime(0.0001, ctx.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.24, ctx.currentTime+0.012);
+        g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime+dur);
+        o.connect(g); g.connect(ctx.destination);
+        o.start();
+        o.stop(ctx.currentTime+dur);
+        setTimeout(resolve, dur*1000 + 40);
+      }catch(e){ resolve(); }
+    });
+  }
+
+  function cancelSpeechNow(){
+    try{ if('speechSynthesis' in window) window.speechSynthesis.cancel(); }catch(e){}
+    if(keepAliveTimer){ clearInterval(keepAliveTimer); keepAliveTimer = null; }
+  }
+
+  function speakAndWait(text){
+    return new Promise(resolve=>{
+      if(!('speechSynthesis' in window)){ resolve(); return; }
+      try{ window.speechSynthesis.cancel(); }catch(e){}
+      let done = false;
+      let fallback = null;
+      const finish = ()=>{
+        if(done) return;
+        done = true;
+        if(fallback) clearTimeout(fallback);
+        if(keepAliveTimer){ clearInterval(keepAliveTimer); keepAliveTimer = null; }
+        resolve();
+      };
+      try{
+        const u = new SpeechSynthesisUtterance(text);
+        u.rate = 1.0;
+        u.pitch = 1.0;
+        u.onend = finish;
+        u.onerror = finish;
+        // Do not rely solely on onend — some mobile browsers (notably Safari)
+        // silently drop the event. Fall back to a generous, length-based timer.
+        const estMs = Math.max(1200, text.length * 95) + 2200;
+        fallback = setTimeout(finish, estMs);
+        // Chrome/Safari have a known bug where long utterances silently pause.
+        // Nudge speechSynthesis periodically to keep it alive.
+        keepAliveTimer = setInterval(()=>{
+          try{
+            if(window.speechSynthesis.paused) window.speechSynthesis.resume();
+          }catch(e){}
+        }, 4000);
+        window.speechSynthesis.speak(u);
+      }catch(e){ finish(); }
+    });
+  }
+
+  async function run(text, chimeFreq){
+    const myGen = ++genToken;
+    const valid = ()=> myGen === genToken;
+
+    cancelSpeechNow();
+    pausedByUs = false;
+
+    if(valid() && settings.spotifyEnabled){
+      const ok = await spotifyPauseAndConfirm();
+      if(!valid()) return;
+      pausedByUs = ok;
+    }
+    if(!valid()) return;
+
+    await sleep(250);
+    if(!valid()) return;
+
+    await playChime(chimeFreq || 880);
+    if(!valid()) return;
+
+    await speakAndWait(text);
+    if(!valid()) return;
+
+    await sleep(250);
+    if(!valid()) return;
+
+    if(pausedByUs){
+      pausedByUs = false;
+      await spotifyResume();
+    }
+  }
+
+  function cancel(){
+    genToken++;
+    cancelSpeechNow();
+  }
+
+  async function resumeIfPausedByUs(){
+    if(pausedByUs){
+      pausedByUs = false;
+      await spotifyResume();
+    }
+  }
+
+  function unlock(){
+    if(unlocked) return;
+    unlocked = true;
+    ensureCtx();
+    try{
+      if('speechSynthesis' in window){
+        const u = new SpeechSynthesisUtterance(' ');
+        u.volume = 0;
+        window.speechSynthesis.speak(u);
+      }
+    }catch(e){}
+  }
+
+  return { run, cancel, resumeIfPausedByUs, unlock, ensureCtx };
+})();
+
+/* ==================================================================
+   SPOTIFY (Authorization Code + PKCE, no client secret)
+   ================================================================== */
+function base64UrlEncode(buffer){
+  let str = '';
+  const bytes = new Uint8Array(buffer);
+  for(let i=0;i<bytes.byteLength;i++) str += String.fromCharCode(bytes[i]);
+  return btoa(str).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+function generateCodeVerifier(){
+  const arr = new Uint8Array(64);
+  crypto.getRandomValues(arr);
+  return base64UrlEncode(arr.buffer);
+}
+async function generateCodeChallenge(verifier){
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier));
+  return base64UrlEncode(digest);
+}
+async function getStoredTokens(){
+  const raw = await storageGet('spotify_tokens');
+  if(!raw) return null;
+  try{ return JSON.parse(raw); }catch(e){ return null; }
+}
+async function saveTokens(data){
+  const prev = await getStoredTokens();
+  const tokens = {
+    access_token: data.access_token,
+    refresh_token: data.refresh_token || (prev && prev.refresh_token) || null,
+    expires_at: Date.now() + (data.expires_in*1000) - 30000,
+  };
+  await storageSet('spotify_tokens', JSON.stringify(tokens));
+  return tokens;
+}
+async function connectSpotify(){
+  const verifier = generateCodeVerifier();
+  await storageSet('spotify_verifier', verifier);
+  const challenge = await generateCodeChallenge(verifier);
+  const authUrl = new URL('https://accounts.spotify.com/authorize');
+  authUrl.search = new URLSearchParams({
+    response_type:'code',
+    client_id: SPOTIFY_CLIENT_ID,
+    scope: SPOTIFY_SCOPES,
+    code_challenge_method:'S256',
+    code_challenge: challenge,
+    redirect_uri: SPOTIFY_REDIRECT_URI,
+  }).toString();
+  window.location.href = authUrl.toString();
+}
+async function disconnectSpotify(){
+  await storageSet('spotify_tokens', '');
+  refreshSpotifyStatus();
+}
+async function handleSpotifyRedirect(){
+  const params = new URLSearchParams(window.location.search);
+  const code = params.get('code');
+  if(!code) return false;
+  const verifier = await storageGet('spotify_verifier');
+  window.history.replaceState({}, document.title, window.location.pathname);
+  if(!verifier) return true;
+  try{
+    const res = await fetch('https://accounts.spotify.com/api/token', {
+      method:'POST',
+      headers:{'Content-Type':'application/x-www-form-urlencoded'},
+      body: new URLSearchParams({
+        client_id: SPOTIFY_CLIENT_ID,
+        grant_type:'authorization_code',
+        code,
+        redirect_uri: SPOTIFY_REDIRECT_URI,
+        code_verifier: verifier,
+      }).toString(),
+    });
+    if(res.ok){ await saveTokens(await res.json()); settings.spotifyEnabled = true; await saveSettings(); }
+  }catch(e){}
+  return true;
+}
+async function getValidAccessToken(){
+  const tokens = await getStoredTokens();
+  if(!tokens) return null;
+  if(Date.now() < tokens.expires_at) return tokens.access_token;
+  if(!tokens.refresh_token) return null;
+  try{
+    const res = await fetch('https://accounts.spotify.com/api/token', {
+      method:'POST',
+      headers:{'Content-Type':'application/x-www-form-urlencoded'},
+      body: new URLSearchParams({
+        client_id: SPOTIFY_CLIENT_ID,
+        grant_type:'refresh_token',
+        refresh_token: tokens.refresh_token,
+      }).toString(),
+    });
+    if(!res.ok) return null;
+    const saved = await saveTokens(await res.json());
+    return saved.access_token;
+  }catch(e){ return null; }
+}
+// Remembers which device we most recently paused, so spotifyResume() can
+// target it explicitly instead of relying on Spotify's "currently active
+// device" guess — which can silently drop during the pause/speech window
+// on phones with stricter background-process limits.
+let lastPausedDeviceId = null;
+
+// Pauses Spotify and returns true only once we're reasonably confident it
+// actually paused (or, failing that, that the pause request was accepted).
+async function spotifyPauseAndConfirm(){
+  const token = await getValidAccessToken();
+  if(!token) return false;
+
+  // Grab the active device id up front, before pausing, while Spotify still
+  // definitely knows which device is playing.
+  try{
+    const preRes = await fetch('https://api.spotify.com/v1/me/player', {
+      headers:{ Authorization:'Bearer '+token },
+    });
+    if(preRes.ok){
+      const preData = await preRes.json();
+      if(preData && preData.device && preData.device.id){
+        lastPausedDeviceId = preData.device.id;
+      }
+    }
+  }catch(e){}
+
+  let putOk = false;
+  try{
+    const res = await fetch('https://api.spotify.com/v1/me/player/pause', {
+      method:'PUT',
+      headers:{ Authorization:'Bearer '+token },
+    });
+    putOk = res.ok; // 204 on success; 403/404 if nothing active
+  }catch(e){ putOk = false; }
+  if(!putOk) return false;
+
+  const deadline = Date.now() + 1500;
+  while(Date.now() < deadline){
+    try{
+      const stateRes = await fetch('https://api.spotify.com/v1/me/player', {
+        headers:{ Authorization:'Bearer '+token },
+      });
+      if(stateRes.status === 204) return true; // no active playback = paused
+      if(stateRes.ok){
+        const data = await stateRes.json();
+        if(data && data.device && data.device.id){
+          lastPausedDeviceId = data.device.id; // keep this fresh too
+        }
+        if(!data || data.is_playing === false) return true;
+      }
+    }catch(e){}
+    await sleep(200);
+  }
+  // The pause request was accepted even if we couldn't verify the state in
+  // time — proceed rather than blocking the whole sequence indefinitely.
+  return true;
+}
+async function spotifyResume(){
+  const token = await getValidAccessToken();
+  if(!token) return;
+  const opts = lastPausedDeviceId
+    ? { method:'PUT', headers:{ Authorization:'Bearer '+token, 'Content-Type':'application/json' }, body: JSON.stringify({ device_id: lastPausedDeviceId }) }
+    : { method:'PUT', headers:{ Authorization:'Bearer '+token } };
+  try{
+    const res = await fetch('https://api.spotify.com/v1/me/player/play', opts);
+    // If the remembered device has gone away entirely (404), fall back to a
+    // deviceless resume once — better than doing nothing.
+    if(res.status === 404 && lastPausedDeviceId){
+      lastPausedDeviceId = null;
+      await fetch('https://api.spotify.com/v1/me/player/play', {
+        method:'PUT',
+        headers:{ Authorization:'Bearer '+token },
+      });
+    }
+  }catch(e){}
+}
+async function refreshSpotifyStatus(){
+  const statusEl = document.getElementById('spotifyStatus');
+  const connectBtn = document.getElementById('spotifyConnectBtn');
+  const disconnectBtn = document.getElementById('spotifyDisconnectBtn');
+  document.getElementById('redirectUriText').textContent = SPOTIFY_REDIRECT_URI;
+  const tokens = await getStoredTokens();
+  if(tokens && tokens.refresh_token){
+    statusEl.textContent = '✅ Connected to Spotify. Make sure a track is already playing on a device before you start a run.';
+    connectBtn.style.display = 'none';
+    disconnectBtn.style.display = 'block';
+  }else{
+    statusEl.textContent = 'Not connected yet. Tap Connect and sign in with Spotify.';
+    connectBtn.style.display = 'block';
+    disconnectBtn.style.display = 'none';
+  }
+}
+document.getElementById('copyRedirectBtn').addEventListener('click', async ()=>{
+  try{ await navigator.clipboard.writeText(SPOTIFY_REDIRECT_URI); }catch(e){}
+});
+document.getElementById('spotifyConnectBtn').addEventListener('click', connectSpotify);
+document.getElementById('spotifyDisconnectBtn').addEventListener('click', disconnectSpotify);
+
+/* ==================================================================
+   SCREEN NAV
+   ================================================================== */
+function showScreen(id){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+/* ==================================================================
+   ROOM SELECT SCREEN (with drag-and-drop reordering)
+   ================================================================== */
+let suppressClickUntil = 0;
+
+function renderRoomList(){
+  const list = document.getElementById('roomList');
+  list.innerHTML = '';
+  orderedRooms().forEach(room=>{
+    const est = roomEstimate(room);
+    const el = document.createElement('div');
+    el.className = 'room-card' + (selectedRooms.has(room.id) ? ' selected' : '');
+    el.dataset.roomId = room.id;
+    el.innerHTML = `
+      <div class="room-check">✓</div>
+      <div class="room-icon">${room.icon}</div>
+      <div class="room-meta">
+        <div class="room-name">${room.name}</div>
+        <div class="room-count">${roomFilteredTasks(room).length} tasks</div>
+      </div>
+      <div class="room-time">${fmtMin(est)}</div>
+      <div class="drag-handle" aria-label="Drag to reorder">⠿</div>
+    `;
+    el.addEventListener('click', (e)=>{
+      if(e.target.closest('.drag-handle')) return;
+      if(Date.now() < suppressClickUntil) return;
+      if(selectedRooms.has(room.id)) selectedRooms.delete(room.id);
+      else selectedRooms.add(room.id);
+      renderRoomList();
+      updateStartButton();
+    });
+    list.appendChild(el);
+  });
+}
+
+function updateStartButton(){
+  document.getElementById('toSettingsBtn').disabled = selectedRooms.size===0;
+}
+
+document.getElementById('selectAllBtn').addEventListener('click', ()=>{
+  selectedRooms = new Set(ROOMS.map(r=>r.id));
+  renderRoomList(); updateStartButton();
+});
+document.getElementById('selectNoneBtn').addEventListener('click', ()=>{
+  selectedRooms = new Set();
+  renderRoomList(); updateStartButton();
+});
+document.getElementById('toSettingsBtn').addEventListener('click', ()=>{
+  AudioSeq.unlock();
+  if(selectedRooms.size===0) return;
+  currentMode = 'clean';
+  showScreen('screen-settings');
+  renderSettings();
+});
+
+/* ==================================================================
+   SPARE TIME FLOW
+   ================================================================== */
+const TIME_PRESETS = [15, 30, 45, 60, 90, 120];
+
+function fmtChipLabel(min){
+  if(min < 60) return `${min} min`;
+  const h = Math.floor(min/60), m = min%60;
+  return m===0 ? `${h} hr` : `${h}h ${m}m`;
+}
+
+function renderTimeChips(){
+  const wrap = document.getElementById('timeChipGrid');
+  wrap.innerHTML = '';
+  TIME_PRESETS.forEach(min=>{
+    const chip = document.createElement('div');
+    chip.className = 'time-chip' + (spareMinutes===min ? ' active' : '');
+    chip.textContent = fmtChipLabel(min);
+    chip.addEventListener('click', ()=>{
+      spareMinutes = min;
+      document.getElementById('customMinutesInput').value = '';
+      renderTimeChips();
+    });
+    wrap.appendChild(chip);
+  });
+}
+document.getElementById('customMinutesInput').addEventListener('input', (e)=>{
+  const v = parseInt(e.target.value, 10);
+  if(!isNaN(v) && v>0){
+    spareMinutes = v;
+    renderTimeChips();
+  }
+});
+
+document.getElementById('toSpareTimeBtn').addEventListener('click', ()=>{
+  AudioSeq.unlock();
+  currentMode = 'spare';
+  showScreen('screen-spare-time');
+  renderTimeChips();
+});
+document.getElementById('spareBackBtn').addEventListener('click', ()=>{
+  currentMode = 'clean';
+  showScreen('screen-rooms');
+});
+document.getElementById('spareContinueBtn').addEventListener('click', ()=>{
+  renderSpareTaskList();
+  showScreen('screen-spare-tasks');
+});
+document.getElementById('spareTasksBackBtn').addEventListener('click', ()=>{
+  showScreen('screen-spare-time');
+  renderTimeChips();
+});
+
+function spareTaskSeconds(t){
+  return t.steps.reduce((sum, step)=>sum+step.s, 0);
+}
+
+function renderSpareTaskList(){
+  const wrap = document.getElementById('spareTaskList');
+  wrap.innerHTML = '';
+  const budget = spareMinutes*60;
+  const fitting = SPARE_TASKS
+    .filter(t=>spareTaskSeconds(t) <= budget)
+    .sort((a,b)=>spareTaskSeconds(b)-spareTaskSeconds(a)); // best use of the time first
+
+  document.getElementById('spareTasksSub').textContent =
+    `These fit in ${fmtMin(budget)} \u2014 tap the one that needs doing most.`;
+
+  if(fitting.length===0){
+    const shortest = SPARE_TASKS.slice().sort((a,b)=>spareTaskSeconds(a)-spareTaskSeconds(b))[0];
+    const note = document.createElement('div');
+    note.className = 'empty-note';
+    note.textContent = `Nothing quite fits in ${fmtMin(budget)}. The shortest job on the list is \u201c${shortest.name}\u201d at ${fmtMin(spareTaskSeconds(shortest))} \u2014 go back and give yourself a bit more time if you can.`;
+    wrap.appendChild(note);
+    return;
+  }
+
+  fitting.forEach(t=>{
+    const el = document.createElement('div');
+    el.className = 'task-pick-card';
+    el.innerHTML = `
+      <div class="task-pick-icon">${t.icon}</div>
+      <div class="task-pick-meta">
+        <div class="task-pick-name">${t.name}</div>
+        <div class="task-pick-sub">${t.steps.length} steps</div>
+      </div>
+      <div class="task-pick-time">${fmtMin(spareTaskSeconds(t))}</div>
+    `;
+    el.addEventListener('click', ()=>startSpareRun(t));
+    wrap.appendChild(el);
+  });
+}
+
+function startSpareRun(t){
+  AudioSeq.unlock();
+  currentMode = 'spare';
+  activeSpareTask = t;
+  queue = t.steps.map((step, i)=>({
+    room: { id:'spare', name:t.name, icon:t.icon },
+    task: { text: step.text },
+    isFirstInRoom: i===0,
+    duration: step.s,
+  }));
+  qIndex = 0;
+  runStartTime = Date.now();
+  runInProgress = true;
+  requestWakeLock();
+  startKeepAliveAudio();
+  showScreen('screen-run');
+  loadTask(qIndex);
+}
+
+/* ---- Drag-and-drop reordering (pointer events: works for touch + mouse) ---- */
+let dragState = null;
+
+function initRoomDragAndDrop(){
+  const list = document.getElementById('roomList');
+  list.addEventListener('pointerdown', onDragPointerDown);
+}
+
+function onDragPointerDown(e){
+  const handle = e.target.closest('.drag-handle');
+  if(!handle) return;
+  const card = e.target.closest('.room-card');
+  if(!card) return;
+  e.preventDefault();
+
+  const list = document.getElementById('roomList');
+  const rect = card.getBoundingClientRect();
+
+  const placeholder = document.createElement('div');
+  placeholder.className = 'room-card room-card-placeholder';
+  placeholder.style.height = rect.height + 'px';
+  card.parentNode.insertBefore(placeholder, card);
+
+  const ghost = card.cloneNode(true);
+  ghost.classList.add('dragging-ghost');
+  ghost.style.position = 'fixed';
+  ghost.style.left = rect.left + 'px';
+  ghost.style.top = rect.top + 'px';
+  ghost.style.width = rect.width + 'px';
+  ghost.style.margin = '0';
+  ghost.style.pointerEvents = 'none';
+  ghost.style.zIndex = '1000';
+  document.body.appendChild(ghost);
+
+  card.style.display = 'none';
+
+  dragState = {
+    card, placeholder, ghost, list,
+    offsetY: e.clientY - rect.top,
+  };
+
+  document.addEventListener('pointermove', onDragPointerMove);
+  document.addEventListener('pointerup', onDragPointerUp);
+  document.addEventListener('pointercancel', onDragPointerUp);
+}
+
+function onDragPointerMove(e){
+  if(!dragState) return;
+  const { ghost, placeholder, list, offsetY } = dragState;
+  const y = e.clientY;
+  ghost.style.top = (y - offsetY) + 'px';
+
+  const siblings = Array.from(list.children).filter(el => el !== placeholder && el !== dragState.card);
+  let placed = false;
+  for(const sib of siblings){
+    const r = sib.getBoundingClientRect();
+    const mid = r.top + r.height/2;
+    if(y < mid){
+      if(sib.previousElementSibling !== placeholder){
+        list.insertBefore(placeholder, sib);
+      }
+      placed = true;
+      break;
+    }
+  }
+  if(!placed && list.lastElementChild !== placeholder){
+    list.appendChild(placeholder);
+  }
+}
+
+function onDragPointerUp(){
+  if(!dragState) return;
+  const { card, placeholder, ghost, list } = dragState;
+  list.insertBefore(card, placeholder);
+  placeholder.remove();
+  ghost.remove();
+  card.style.display = '';
+
+  document.removeEventListener('pointermove', onDragPointerMove);
+  document.removeEventListener('pointerup', onDragPointerUp);
+  document.removeEventListener('pointercancel', onDragPointerUp);
+
+  suppressClickUntil = Date.now() + 300;
+  dragState = null;
+
+  roomOrder = Array.from(list.children).map(el => el.dataset.roomId);
+  saveRoomOrder();
+}
+
+/* ==================================================================
+   SETTINGS SCREEN
+   ================================================================== */
+const PACE_DESC = {
+  speedy: 'Timings assume you keep moving. Good when you\u2019re short on time and want a push.',
+  deeper: 'Timings allow for a thorough clean at a normal pace, with a bit of breathing room.',
+  maintenance: 'For when the place is already fairly tidy. Picking-up and putting-away tasks are quick, but proper wipes, hoovers, and any bigger jobs you leave on still take their normal time.',
+};
+function renderSettings(){
+  document.querySelectorAll('.switch').forEach(sw=>{
+    const key = sw.dataset.key;
+    sw.classList.toggle('on', settings[key]);
+  });
+  document.getElementById('paceDeeper').classList.toggle('active', settings.pace==='deeper');
+  document.getElementById('paceSpeedy').classList.toggle('active', settings.pace==='speedy');
+  document.getElementById('paceMaintenance').classList.toggle('active', settings.pace==='maintenance');
+  document.getElementById('paceDesc').textContent = PACE_DESC[settings.pace];
+  updateEstimate();
+  refreshSpotifyStatus();
+}
+document.querySelectorAll('.switch').forEach(sw=>{
+  sw.addEventListener('click', ()=>{
+    const key = sw.dataset.key;
+    settings[key] = !settings[key];
+    sw.classList.toggle('on', settings[key]);
+    saveSettings();
+    updateEstimate();
+  });
+});
+document.getElementById('paceDeeper').addEventListener('click', ()=>{
+  settings.pace='deeper'; saveSettings(); renderSettings();
+});
+document.getElementById('paceSpeedy').addEventListener('click', ()=>{
+  settings.pace='speedy'; saveSettings(); renderSettings();
+});
+document.getElementById('paceMaintenance').addEventListener('click', ()=>{
+  settings.pace='maintenance'; saveSettings(); renderSettings();
+});
+function updateEstimate(){
+  const rooms = orderedRooms().filter(r=>selectedRooms.has(r.id));
+  let totalSeconds = rooms.reduce((sum,r)=>sum+roomEstimate(r),0);
+  let totalTasks = rooms.reduce((sum,r)=>sum+roomFilteredTasks(r).length,0);
+  if(rooms.length>0 && settings.putAway){
+    totalSeconds += taskDuration(WRAP_UP_ROOM.tasks[0]);
+    totalTasks += 1;
+  }
+  document.getElementById('estTime').textContent = fmtMin(totalSeconds);
+  document.getElementById('estRoomsLbl').textContent = `Estimated time · ${rooms.length} room${rooms.length===1?'':'s'}`;
+  document.getElementById('estTaskCount').textContent = `${totalTasks} tasks`;
+}
+document.getElementById('backToRoomsBtn').addEventListener('click', ()=>{
+  showScreen('screen-rooms'); renderRoomList(); updateStartButton();
+});
+document.getElementById('startRunBtn').addEventListener('click', startRun);
+
+/* ==================================================================
+   RUN SCREEN
+   ================================================================== */
+function startRun(){
+  AudioSeq.unlock();
+  buildQueue();
+  if(queue.length===0){ showScreen('screen-rooms'); return; }
+  qIndex = 0;
+  runStartTime = Date.now();
+  runInProgress = true;
+  requestWakeLock();
+  startKeepAliveAudio();
+  showScreen('screen-run');
+  loadTask(qIndex);
+}
+
+function loadTask(index){
+  const item = queue[index];
+  taskSeconds = item.duration;
+  secondsLeft = item.duration;
+  paused = false;
+  pausedRemainingMs = 0;
+  document.getElementById('pauseBtn').textContent = 'Pause';
+  document.getElementById('pauseBtn').classList.remove('paused');
+
+  document.getElementById('runRoomIcon').textContent = item.room.icon;
+  document.getElementById('runRoomName').textContent = item.room.name;
+  document.getElementById('taskIndex').textContent = `Task ${index+1} of ${queue.length}`;
+  document.getElementById('taskText').textContent = item.task.text;
+
+  const next = queue[index+1];
+  document.getElementById('nextPreview').textContent = next
+    ? (next.room.id!==item.room.id ? `Next: ${next.room.name} — ${next.task.text}` : `Next: ${next.task.text}`)
+    : 'Last task in the run';
+
+  renderDots();
+  renderDial();
+
+  const toSpeak = item.isFirstInRoom
+    ? `${item.room.name}. ${item.task.text}.`
+    : item.task.text;
+
+  AudioSeq.run(toSpeak, item.isFirstInRoom ? 660 : 880);
+
+  taskEndAt = Date.now() + taskSeconds*1000;
+  clearInterval(timerHandle);
+  timerHandle = setInterval(tick, 250);
+  tick();
+}
+
+function renderDots(){
+  const wrap = document.getElementById('progressDots');
+  wrap.innerHTML = '';
+  queue.forEach((item,i)=>{
+    const d = document.createElement('div');
+    d.className = 'dot' + (i<qIndex ? ' done' : i===qIndex ? ' now' : '');
+    wrap.appendChild(d);
+  });
+}
+
+const CIRC = 2*Math.PI*80;
+function renderDial(){
+  const circle = document.getElementById('dialProgress');
+  circle.setAttribute('stroke-dasharray', CIRC.toFixed(1));
+  updateDial();
+}
+function updateDial(){
+  const frac = taskSeconds>0 ? secondsLeft/taskSeconds : 0;
+  const offset = CIRC * (1-frac);
+  document.getElementById('dialProgress').setAttribute('stroke-dashoffset', offset.toFixed(1));
+  document.getElementById('timeNum').textContent = fmtClock(secondsLeft);
+}
+
+function tick(){
+  if(paused) return;
+  const remainingMs = taskEndAt - Date.now();
+  secondsLeft = Math.max(0, Math.ceil(remainingMs/1000));
+  updateDial();
+  if(remainingMs <= 0){
+    advanceTask();
+  }
+}
+
+function advanceTask(){
+  AudioSeq.cancel();
+  clearInterval(timerHandle);
+  qIndex++;
+  if(qIndex>=queue.length){ finishRun(); return; }
+  loadTask(qIndex);
+}
+
+function goBackTask(){
+  if(qIndex===0) return;
+  AudioSeq.cancel();
+  clearInterval(timerHandle);
+  qIndex--;
+  loadTask(qIndex);
+}
+
+document.getElementById('pauseBtn').addEventListener('click', ()=>{
+  paused = !paused;
+  const btn = document.getElementById('pauseBtn');
+  btn.textContent = paused ? 'Resume' : 'Pause';
+  btn.classList.toggle('paused', paused);
+  if(paused){
+    pausedRemainingMs = Math.max(0, taskEndAt - Date.now());
+    AudioSeq.cancel(); // stop any speech immediately; leaves Spotify as-is (paused stays paused)
+  }else{
+    taskEndAt = Date.now() + pausedRemainingMs;
+    AudioSeq.resumeIfPausedByUs(); // resume music if we were the ones who paused it
+  }
+});
+document.getElementById('skipTaskBtn').addEventListener('click', advanceTask);
+document.getElementById('backTaskBtn').addEventListener('click', goBackTask);
+document.getElementById('endRunBtn').addEventListener('click', ()=>{
+  clearInterval(timerHandle);
+  AudioSeq.cancel();
+  finishRun();
+});
+
+/* ==================================================================
+   FINISH SCREEN
+   ================================================================== */
+function finishRun(){
+  clearInterval(timerHandle);
+  runInProgress = false;
+  releaseWakeLock();
+  stopKeepAliveAudio();
+  const elapsedMin = runStartTime ? Math.round((Date.now()-runStartTime)/60000) : 0;
+
+  if(currentMode==='spare' && activeSpareTask){
+    document.getElementById('finishStats').textContent = `${activeSpareTask.name} \u00b7 about ${elapsedMin} min`;
+    const praise = activeSpareTask.congrats;
+    document.getElementById('finishPraise').textContent = praise;
+    AudioSeq.run(praise, 990);
+    showScreen('screen-finish');
+    return;
+  }
+
+  const roomsDone = new Set(queue.slice(0, Math.min(qIndex,queue.length)).map(q=>q.room.id));
+  roomsDone.delete('wrapup');
+  document.getElementById('finishStats').textContent =
+    `${roomsDone.size} room${roomsDone.size===1?'':'s'} · about ${elapsedMin} min`;
+  const praise = PRAISE[Math.floor(Math.random()*PRAISE.length)];
+  document.getElementById('finishPraise').textContent = praise;
+  AudioSeq.run(praise, 990);
+  showScreen('screen-finish');
+}
+document.getElementById('restartBtn').addEventListener('click', ()=>{
+  if(currentMode==='spare'){
+    activeSpareTask = null;
+    showScreen('screen-spare-time');
+    renderTimeChips();
+  }else{
+    showScreen('screen-rooms'); renderRoomList(); updateStartButton();
+  }
+});
+
+/* ==================================================================
+   INIT
+   ================================================================== */
+document.addEventListener('pointerdown', ()=>AudioSeq.unlock(), { once:true });
+
+(async function init(){
+  await loadSettings();
+  await loadRoomOrder();
+  initRoomDragAndDrop();
+  renderTimeChips();
+  const justAuthed = await handleSpotifyRedirect();
+  renderRoomList();
+  updateStartButton();
+  if(justAuthed){
+    showScreen('screen-settings');
+    renderSettings();
+  }
+})();
+</script>
+</body>
+</html>
